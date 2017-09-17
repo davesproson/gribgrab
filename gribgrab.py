@@ -35,8 +35,8 @@ class IdxField(object):
 
 class IdxCollection(object):
     def __init__(self):
-        self.i_to_idx = dict()
-        self.idx_to_i = dict()
+        self.i_to_idx = {}
+        self.idx_to_i = {}
 
     def add_idx(self, idx):
         self.i_to_idx[idx.index] = idx
@@ -52,7 +52,7 @@ class IdxCollection(object):
         return (bytes_start, bytes_end)
 
     def filter(self, regex):
-        matches = list()
+        matches = []
         regex = re.compile(regex)
 
         for idx in self.i_to_idx.values():
