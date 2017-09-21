@@ -1,5 +1,6 @@
 import datetime
 import re
+import http
 import urllib
 import urllib.parse
 import requests
@@ -38,6 +39,12 @@ class IdxCollection(object):
         self.i_to_idx = {}
         self.idx_to_i = {}
 
+    def __str__(self):
+        return 'IdxCollection: {} fields'.format(
+            len(self.i_to_idx)
+        )
+
+
     def add_idx(self, idx):
         self.i_to_idx[idx.index] = idx
         self.idx_to_i[idx] = idx.index
@@ -54,15 +61,11 @@ class IdxCollection(object):
     def filter(self, regex):
         matches = []
         regex = re.compile(regex)
-
         for idx in self.i_to_idx.values():
             if regex.match(str(idx)) is not None:
                 matches.append(idx)
 
         return matches
-
-
-
 
 
 class NomadsDownloader(object):
@@ -116,6 +119,9 @@ class NomadsDownloader(object):
 
         self.idx_files = [i + '.idx' for i in self.grib_files]
 
+    def _gribfile_to_step(self, gribfile):
+        return self.steps[self.grib_files.index(gribfile)]
+
     def _idx_files_exist(self):
         for idx in self.idx_files:
             if requests.head(idx).status_code != 200:
@@ -140,8 +146,36 @@ class NomadsDownloader(object):
 
         return c
 
-    def download(self, filename='out.grb2'):
+    def download(self, filename=None, file_template=None):
+        """
+        Download data. Either mergin into a single file (if filename is
+        specified), or into individual files according to file_template.
+        Only one of filename and file_template should be specified.
+
+        kwargs:
+            filename - a file to download all data to.
+            file_template - a template to download individual files. May
+                contain formatters for strfime, and *must* contain a 'step' key
+                for str.format.
+        """
+
+        if filename is not None and file_template is not None:
+            raise ValueError((
+                'only one of \'filename\', \'file_template\' should be '
+                'specified'
+            ))
+
         for i, idx_file in enumerate(self.idx_files):
+
+            if filename is None and file_template is None:
+                _filename = os.path.basename(self.grib_files[i])
+            elif file_template is None:
+                _filename = filename
+            else:
+                _filename = self.cycle.strftime(file_template).format(
+                    step=self._gribfile_to_step(self.grib_files[i])
+                )
+
             byte_ranges = []
             idx_collection = self._get_idx_data(idx_file)
             for regex in self.regexes:
@@ -160,5 +194,21 @@ class NomadsDownloader(object):
             conn = http.client.HTTPConnection(type(self).SERVER)
             conn.request('GET', url_path, headers={'Range': byte_header})
             resp = conn.getresponse()
-            with open(filename, 'wb') as fout:
+            with open(_filename, 'ab') as fout:
                 fout.write(resp.read())
+
+if __name__ == '__main__':
+    cycle = datetime.datetime.utcnow().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    n = NomadsDownloader(
+        cycle,
+        horizon=168,
+        resolution=0.5,
+    )
+
+    n.add_regex('.*GRD:10 m above.*')
+    n.add_regex('.*TMP:2 m above.*')
+
+    n.download(file_template='gfs.t%Hz.{step:02d}.grb2')
