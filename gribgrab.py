@@ -8,7 +8,21 @@ import requests
 from itertools import chain
 
 class IdxField(object):
+    """
+    An IdxField represents a single grib2 file index. A typical index looks
+    like:
+        8:900981:d=1995103000:UGRD:50 m above ground:165 hour fcst:
+    """
+
     def __init__(self, idx_line):
+        """
+        Initialize an instance.
+
+        args:
+            idx_line - a string representing a singe grib2 message, as output
+            by e.g. wgrib2 with no cmdline args.
+        """
+
         self.idx_data = idx_line.strip().split(':')
 
         self.index = int(self.idx_data[0])
@@ -35,6 +49,11 @@ class IdxField(object):
 
 
 class IdxCollection(object):
+    """
+    An IdxCollection is a group of IdxFields. It therefore represents the
+    contents of a grib2 index file.
+    """
+
     def __init__(self):
         self.i_to_idx = {}
         self.idx_to_i = {}
@@ -46,19 +65,50 @@ class IdxCollection(object):
 
 
     def add_idx(self, idx):
+        """
+        Add an IdxField to this collection.
+
+        args:
+            idx - the IdxField to add
+        """
+
         self.i_to_idx[idx.index] = idx
         self.idx_to_i[idx] = idx.index
 
     def byterange(self, idx):
+        """
+        Return the byterange associated with a particular grib2 message.
+
+        args:
+            idx - the IdxField whose byterange we're interested in.
+
+        returns:
+            a 2-tuple giving the start and end byte offsets of the assiciated
+                grib2 message.
+        """
+
         bytes_start = idx.bytes_start
         try:
             bytes_end = self.i_to_idx[idx.index+1].bytes_start - 1
         except KeyError:
+            # We handle a KeyError as it will be raised when requesting the
+            # last message in a file. However a KeyError may also be raised
+            # if idx is not a member of this collection. TODO: handle this!
             bytes_end = ''
 
         return (bytes_start, bytes_end)
 
     def filter(self, regex):
+        """
+        Filter for IdxFields which match a given regex.
+
+        args:
+            regex - the regex to match
+
+        returns:
+            a list of IdxFields that match regex.
+        """
+
         matches = []
         regex = re.compile(regex)
         for idx in self.i_to_idx.values():
@@ -168,10 +218,17 @@ class NomadsDownloader(object):
         for i, idx_file in enumerate(self.idx_files):
 
             if filename is None and file_template is None:
+                # Neither filename or file_template are given, so maintain the
+                # filename from the server
                 _filename = os.path.basename(self.grib_files[i])
             elif file_template is None:
+                # A single filename has been specified - use this. This will
+                # result in all files from the server being merged into a
+                # single local grib2 file.
                 _filename = filename
             else:
+                # A file pattern has been specified, so we're essentially
+                # renaming the files as we download.
                 _filename = self.cycle.strftime(file_template).format(
                     step=self._gribfile_to_step(self.grib_files[i])
                 )
