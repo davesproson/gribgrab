@@ -42,7 +42,7 @@ class IdxField(object):
             str(self.index), str(self.bytes_start),
             self.reftime.strftime('d=%Y%m%d%H'), self.varname,
             self.level, self.interval
-        ])
+        ]) + ':'
 
     def __repr__(self):
         return '{!s}({!r})'.format(
