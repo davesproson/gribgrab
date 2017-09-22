@@ -7,6 +7,9 @@ import requests
 
 from itertools import chain
 
+class DataNotAvailableError(Exception):
+    pass
+
 class IdxField(object):
     """
     An IdxField represents a single grib2 file index. A typical index looks
@@ -172,7 +175,7 @@ class NomadsDownloader(object):
     def _gribfile_to_step(self, gribfile):
         return self.steps[self.grib_files.index(gribfile)]
 
-    def _idx_files_exist(self):
+    def exists(self):
         for idx in self.idx_files:
             if requests.head(idx).status_code != 200:
                 return False
@@ -186,6 +189,7 @@ class NomadsDownloader(object):
             self.add_regex(regex)
 
     def _get_idx_data(self, idx_file):
+
         c = IdxCollection()
 
         with urllib.request.urlopen(idx_file) as response:
@@ -208,6 +212,9 @@ class NomadsDownloader(object):
                 contain formatters for strfime, and *must* contain a 'step' key
                 for str.format.
         """
+
+        if not self.exists():
+            raise DataNotAvailableError('index files do not exist on server')
 
         if filename is not None and file_template is not None:
             raise ValueError((
