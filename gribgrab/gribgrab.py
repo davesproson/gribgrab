@@ -5,7 +5,26 @@ import urllib
 import urllib.parse
 import requests
 
+from functools import wraps
 from itertools import chain
+
+def retry(f):
+    _attempts = 5
+    attempts_remaining = _attempts
+    @wraps(f)
+    def inner(*args, **kwargs):
+        nonlocal attempts_remaining
+        while True:
+            try:
+                result = f(*args, **kwargs)
+                attempts_remaining = _attempts
+                return result
+            except Exception:
+                attempts_remaining -= 1
+                if not attempts_remaining:
+                    attempts_remaining = _attempts
+                    raise
+    return inner
 
 class DataNotAvailableError(Exception):
     pass
@@ -200,6 +219,30 @@ class NomadsDownloader(object):
 
         return c
 
+    @retry
+    def _get_file(self, remote_file, local_file, byterange=None):
+        """Download a single grib2 file from nomads.
+
+        args:
+            remote_file - the url of the file to download
+            local_file - the path to download to
+
+        kwargs:
+            byterange - the byterange header to send to the server
+        """
+
+        if byterange is not None:
+            headers = {'Range': byterange}
+        else:
+            headers = {}
+
+        conn = http.client.HTTPConnection(type(self).SERVER)
+
+        conn.request('GET', remote_file, headers=headers)
+        response = conn.getresponse()
+        with open(local_file, 'ab') as f:
+            f.write(response.read())
+
     def download(self, filename=None, file_template=None):
         """
         Download data. Either mergin into a single file (if filename is
@@ -255,11 +298,7 @@ class NomadsDownloader(object):
                           for i in byte_ranges]))
 
             url_path = urllib.parse.urlparse(self.grib_files[i]).path
-            conn = http.client.HTTPConnection(type(self).SERVER)
-            conn.request('GET', url_path, headers={'Range': byte_header})
-            resp = conn.getresponse()
-            with open(_filename, 'ab') as fout:
-                fout.write(resp.read())
+            self._get_file(url_path, _filename, byte_header)
 
 if __name__ == '__main__':
     cycle = datetime.datetime.utcnow().replace(
