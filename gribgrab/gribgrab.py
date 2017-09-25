@@ -1,12 +1,15 @@
 import datetime
 import re
 import http
+import logging
+import os
 import urllib
 import urllib.parse
 import requests
 
 from functools import wraps
 from itertools import chain
+
 
 def retry(f):
     _attempts = 5
@@ -36,7 +39,7 @@ class IdxField(object):
         8:900981:d=1995103000:UGRD:50 m above ground:165 hour fcst:
     """
 
-    def __init__(self, idx_line):
+    def __init__(self, idx_line, logger=None):
         """
         Initialize an instance.
 
@@ -44,6 +47,8 @@ class IdxField(object):
             idx_line - a string representing a singe grib2 message, as output
             by e.g. wgrib2 with no cmdline args.
         """
+
+        self.logger = logger or logging.getLogger(__name__)
 
         self.idx_data = idx_line.strip().split(':')
 
@@ -76,9 +81,11 @@ class IdxCollection(object):
     contents of a grib2 index file.
     """
 
-    def __init__(self):
+    def __init__(self, logger=None):
         self.i_to_idx = {}
         self.idx_to_i = {}
+
+        self.logger = logger or logging.getLogger(__name__)
 
     def __str__(self):
         return 'IdxCollection: {} fields'.format(
@@ -109,6 +116,7 @@ class IdxCollection(object):
                 grib2 message.
         """
 
+        self.logger.debug('getting byterange for message: {}'.format(idx))
         bytes_start = idx.bytes_start
         try:
             bytes_end = self.i_to_idx[idx.index+1].bytes_start - 1
@@ -131,10 +139,12 @@ class IdxCollection(object):
             a list of IdxFields that match regex.
         """
 
+        self.logger.debug('filtering on regex \'{}\''.format(regex))
         matches = []
         regex = re.compile(regex)
         for idx in self.i_to_idx.values():
             if regex.match(str(idx)) is not None:
+                self.logger.debug('found match: {}'.format(idx))
                 matches.append(idx)
 
         return matches
@@ -153,7 +163,11 @@ class NomadsDownloader(object):
     VALID_RESOLUTIONS = [0.25, 0.5, 1, 2.5]
     FILE_PATTERN = 'gfs.t{cycle_hr:02d}z.pgrb2.{res_str}.f{step:03d}'
 
-    def __init__(self, cycle, horizon=168, resolution=0.5, min_step=None):
+    def __init__(self, cycle, horizon=168, resolution=0.5, min_step=None,
+                 logger=None):
+
+        self.logger = logger or logging.getLogger(__name__)
+
         if resolution not in type(self).VALID_RESOLUTIONS:
             raise ValueError('resolution must be one of {}'.format(
                 ','.join([str(i) for i in type(self).STEPS])
@@ -196,11 +210,15 @@ class NomadsDownloader(object):
 
     def exists(self):
         for idx in self.idx_files:
+            self.logger.debug('checking {} exists...'.format(idx))
             if requests.head(idx).status_code != 200:
+                self.logger.debug('...fail')
                 return False
+        self.logger.debug('all idx files exist')
         return True
 
     def add_regex(self, regex):
+        self.logger.debug('adding regex: {}'.format(regex))
         self.regexes.append(regex)
 
     def add_regexes(self, regexes):
@@ -235,6 +253,11 @@ class NomadsDownloader(object):
             headers = {'Range': byterange}
         else:
             headers = {}
+
+        self.logger.info('downloading {}'.format(remote_file))
+        self.logger.debug('downloading to {}'.format(local_file))
+        if byterange is not None:
+            self.logger.debug('using byteranges {}'.format(byterange))
 
         conn = http.client.HTTPConnection(type(self).SERVER)
 
@@ -290,9 +313,6 @@ class NomadsDownloader(object):
                 for idx in idx_list:
                     byte_ranges.append(idx_collection.byterange(idx))
 
-            print('downloading {} with byteranges {}'.format(
-                idx_file, ','.join([str(i) for i in byte_ranges])))
-
             byte_header = 'bytes={}'.format(
                 ','.join([str(i[0]) + '-' + str(i[1])
                           for i in byte_ranges]))
@@ -301,13 +321,20 @@ class NomadsDownloader(object):
             self._get_file(url_path, _filename, byte_header)
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        filename="download.log",
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    )
+    logging.getLogger('requests').setLevel(logging.WARNING)
+
     cycle = datetime.datetime.utcnow().replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 
     n = NomadsDownloader(
         cycle,
-        horizon=168,
+        horizon=24,
         resolution=0.5,
     )
 
