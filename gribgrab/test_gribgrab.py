@@ -1,12 +1,22 @@
+"""
+Tests for gribgrab.
+"""
+
 import datetime
 import unittest
 
+# Allow these tests to be run both from the commandline (within this dir), and
+# using nosetests.
 try:
     from gribgrab import gribgrab
 except ImportError:
     import gribgrab
 
 class ExistsTestCase(unittest.TestCase):
+    """
+    Tests to confirm that the presence or otherwise of grib data is correctly
+    reported.
+    """
 
     def test_no_future_data(self):
         """Check exists() for data in the future returns False"""
@@ -14,18 +24,22 @@ class ExistsTestCase(unittest.TestCase):
             hour=0, minute=0, second=0, microsecond=0
         ) + datetime.timedelta(days=3)
 
-        m = gribgrab.NomadsDownloader(
+        downloader = gribgrab.NomadsDownloader(
             cycle,
             resolution=0.5,
             horizon=168
         )
 
-        self.assertFalse(m.exists())
+        self.assertFalse(downloader.exists())
 
 
 class IdxFieldTestCase(unittest.TestCase):
+    """
+    Unit tests associated with gribgrab.IdxField.
+    """
 
     def setUp(self):
+        """Create a test IdxField"""
         self.idx_field = '6:637816:d=1995103000:UGRD:30 m above ground:165 hour fcst:'
         self.idx = gribgrab.IdxField(self.idx_field)
 
@@ -59,8 +73,14 @@ class IdxFieldTestCase(unittest.TestCase):
 
 
 class IdxCollectionTestCase(unittest.TestCase):
+    """
+    Unit tests associated with gribgrab.IdxCollection.
+    """
 
     def setUp(self):
+        """
+        Setup temporary data for unit tests.
+        """
         self.idx_fields = [
             '1:0:d=1995103000:GUST:surface:165 hour fcst:',
             '2:73573:d=1995103000:MSLET:mean sea level:165 hour fcst:',
@@ -109,4 +129,3 @@ class IdxCollectionTestCase(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
-

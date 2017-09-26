@@ -1,3 +1,23 @@
+"""
+This module provides a downloading interface "NomadsDownloader", which allows
+the retrieval of grib2 GFS forecast data from the nomads ftp site. Grib2 index
+files are parsed, to allow variable subsetting through the http Byterange
+header.
+
+Example:
+
+dl = NomadsDownloader(
+    cycle : datetime,
+    horizon : int,
+    resolution : float
+)
+
+dl.add_regex('.*GRD:10 m above.*')
+
+dl.download()
+
+"""
+
 import datetime
 import re
 import http
@@ -5,21 +25,26 @@ import logging
 import os
 import urllib
 import urllib.parse
-import requests
 
 from functools import wraps
 from itertools import chain
 
+import requests
 
-def retry(f):
+def retry(func):
+    """
+    Provides a (hacky) decorator, which allows retries a function call upto 5
+    times if an exception is raised in that function.
+    """
     _attempts = 5
     attempts_remaining = _attempts
-    @wraps(f)
+    @wraps(func)
     def inner(*args, **kwargs):
+        """Wrap func, and allow it try retry up to 5 times."""
         nonlocal attempts_remaining
         while True:
             try:
-                result = f(*args, **kwargs)
+                result = func(*args, **kwargs)
                 attempts_remaining = _attempts
                 return result
             except Exception:
@@ -30,7 +55,10 @@ def retry(f):
     return inner
 
 class DataNotAvailableError(Exception):
-    pass
+    """
+    Indicates a download has been attempted, but data are not available on the
+    server.
+    """
 
 class IdxField(object):
     """
@@ -116,7 +144,7 @@ class IdxCollection(object):
                 grib2 message.
         """
 
-        self.logger.debug('getting byterange for message: {}'.format(idx))
+        self.logger.debug('getting byterange for message: %s', idx)
         bytes_start = idx.bytes_start
         try:
             bytes_end = self.i_to_idx[idx.index+1].bytes_start - 1
@@ -139,18 +167,21 @@ class IdxCollection(object):
             a list of IdxFields that match regex.
         """
 
-        self.logger.debug('filtering on regex \'{}\''.format(regex))
+        self.logger.debug('filtering on regex \'%s\'', regex)
         matches = []
         regex = re.compile(regex)
         for idx in self.i_to_idx.values():
             if regex.match(str(idx)) is not None:
-                self.logger.debug('found match: {}'.format(idx))
+                self.logger.debug('found match: %s', idx)
                 matches.append(idx)
 
         return matches
 
 
 class NomadsDownloader(object):
+    """
+    Provides an interface to download grib2 forecast data from Nomads.
+    """
 
     SERVER = 'www.ftp.ncep.noaa.gov'
     BASE_URL = '/data/nccf/com/gfs/prod/'
@@ -209,8 +240,12 @@ class NomadsDownloader(object):
         return self.steps[self.grib_files.index(gribfile)]
 
     def exists(self):
+        """
+        Check if all required data exists on the server. This is done by
+        checking the index files, rather than the grib2 files themselves.
+        """
         for idx in self.idx_files:
-            self.logger.debug('checking {} exists...'.format(idx))
+            self.logger.debug('checking %s exists...', idx)
             if requests.head(idx).status_code != 200:
                 self.logger.debug('...fail')
                 return False
@@ -218,10 +253,24 @@ class NomadsDownloader(object):
         return True
 
     def add_regex(self, regex):
-        self.logger.debug('adding regex: {}'.format(regex))
+        """
+        Add a regex to the download regex. Any variable whose inventory entry
+        matched this regex will be downloaded.
+
+        args:
+            regex - the regex to compare against the inventory.
+        """
+        self.logger.debug('adding regex: %s', regex)
         self.regexes.append(regex)
 
     def add_regexes(self, regexes):
+        """
+        Add a number of regexes to the downloader, through repeated calls to
+        add_regex.
+
+        args:
+            regexes - an iterable of strings, each a regex to match.
+        """
         for regex in regexes:
             self.add_regex(regex)
 
@@ -254,17 +303,17 @@ class NomadsDownloader(object):
         else:
             headers = {}
 
-        self.logger.info('downloading {}'.format(remote_file))
-        self.logger.debug('downloading to {}'.format(local_file))
+        self.logger.info('downloading %s', remote_file)
+        self.logger.debug('downloading to %s', local_file)
         if byterange is not None:
-            self.logger.debug('using byteranges {}'.format(byterange))
+            self.logger.debug('using byteranges %s', byterange)
 
         conn = http.client.HTTPConnection(type(self).SERVER)
 
         conn.request('GET', remote_file, headers=headers)
         response = conn.getresponse()
-        with open(local_file, 'ab') as f:
-            f.write(response.read())
+        with open(local_file, 'ab') as local_grib:
+            local_grib.write(response.read())
 
     def download(self, filename=None, file_template=None):
         """
@@ -320,7 +369,11 @@ class NomadsDownloader(object):
             url_path = urllib.parse.urlparse(self.grib_files[i]).path
             self._get_file(url_path, _filename, byte_header)
 
-if __name__ == '__main__':
+def demo():
+    """
+    Demonstrate the module: download 24 hours of 0.5 degree data.
+    """
+
     logging.basicConfig(
         filename="download.log",
         level=logging.DEBUG,
@@ -342,3 +395,6 @@ if __name__ == '__main__':
     n.add_regex('.*TMP:2 m above.*')
 
     n.download(file_template='gfs.t%Hz.{step:02d}.grb2')
+
+if __name__ == '__main__':
+    demo()
