@@ -1,7 +1,10 @@
 import datetime
 import unittest
 
-import gribgrab
+try:
+    from gribgrab import gribgrab
+except ImportError:
+    import gribgrab
 
 class ExistsTestCase(unittest.TestCase):
 
