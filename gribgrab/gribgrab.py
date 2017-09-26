@@ -385,16 +385,16 @@ def demo():
         hour=0, minute=0, second=0, microsecond=0
     )
 
-    n = NomadsDownloader(
+    downloader = NomadsDownloader(
         cycle,
         horizon=24,
         resolution=0.5,
     )
 
-    n.add_regex('.*GRD:10 m above.*')
-    n.add_regex('.*TMP:2 m above.*')
+    downloader.add_regex('.*GRD:10 m above.*')
+    downloader.add_regex('.*TMP:2 m above.*')
 
-    n.download(file_template='gfs.t%Hz.{step:02d}.grb2')
+    downloader.download(file_template='gfs.t%Hz.{step:02d}.grb2')
 
 if __name__ == '__main__':
     demo()
