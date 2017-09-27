@@ -369,6 +369,10 @@ class NomadsDownloader(object):
             url_path = urllib.parse.urlparse(self.grib_files[i]).path
             self._get_file(url_path, _filename, byte_header)
 
+
+class GFSDownloader(NomadsDownloader):
+    """Placeholder. We want a GFSDownloader Specifically for GFS Data."""
+
 def demo():
     """
     Demonstrate the module: download 24 hours of 0.5 degree data.
