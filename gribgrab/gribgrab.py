@@ -22,6 +22,7 @@ import datetime
 import re
 import http
 import logging
+import multiprocessing
 import os
 import urllib
 import urllib.parse
@@ -53,6 +54,37 @@ def retry(func):
                     attempts_remaining = _attempts
                     raise
     return inner
+
+@retry
+def get_file(server, remote_file, local_file, byterange=None):
+    """Download a single grib2 file from nomads.
+
+    args:
+        remote_file - the url of the file to download
+        local_file - the path to download to
+
+    kwargs:
+        byterange - the byterange header to send to the server
+    """
+
+    if byterange is not None:
+        headers = {'Range': byterange}
+    else:
+        headers = {}
+
+    logging.info('downloading %s', remote_file)
+    logging.debug('downloading to %s', local_file)
+    if byterange is not None:
+        logging.debug('using byteranges %s', byterange)
+
+    conn = http.client.HTTPConnection(server)
+
+    conn.request('GET', remote_file, headers=headers)
+    response = conn.getresponse()
+    with open(local_file, 'ab') as local_grib:
+        local_grib.write(response.read())
+    conn.close()
+
 
 class DataNotAvailableError(Exception):
     """
@@ -186,10 +218,10 @@ class NomadsDownloader(object):
     SERVER = 'www.ftp.ncep.noaa.gov'
     BASE_URL = '/data/nccf/com/gfs/prod/'
     STEPS = {
-        0.25: chain(range(121), range(123, 241, 3), range(252, 385, 12)),
-        0.5: chain(range(0, 241, 3), range(252, 385, 12)),
-        1: chain(range(0, 241, 3), range(252, 385, 12)),
-        2.5: chain(range(0, 241, 3), range(252, 385, 12))
+        0.25: list(chain(range(121), range(123, 241, 3), range(252, 385, 12))),
+        0.5: list(chain(range(0, 241, 3), range(252, 385, 12))),
+        1: list(chain(range(0, 241, 3), range(252, 385, 12))),
+        2.5: list(chain(range(0, 241, 3), range(252, 385, 12)))
     }
     VALID_RESOLUTIONS = [0.25, 0.5, 1, 2.5]
     FILE_PATTERN = 'gfs.t{cycle_hr:02d}z.pgrb2.{res_str}.f{step:03d}'
@@ -244,6 +276,9 @@ class NomadsDownloader(object):
         Check if all required data exists on the server. This is done by
         checking the index files, rather than the grib2 files themselves.
         """
+        if not self.idx_files:
+            return False
+
         for idx in self.idx_files:
             self.logger.debug('checking %s exists...', idx)
             if requests.head(idx).status_code != 200:
@@ -286,36 +321,7 @@ class NomadsDownloader(object):
 
         return c
 
-    @retry
-    def _get_file(self, remote_file, local_file, byterange=None):
-        """Download a single grib2 file from nomads.
-
-        args:
-            remote_file - the url of the file to download
-            local_file - the path to download to
-
-        kwargs:
-            byterange - the byterange header to send to the server
-        """
-
-        if byterange is not None:
-            headers = {'Range': byterange}
-        else:
-            headers = {}
-
-        self.logger.info('downloading %s', remote_file)
-        self.logger.debug('downloading to %s', local_file)
-        if byterange is not None:
-            self.logger.debug('using byteranges %s', byterange)
-
-        conn = http.client.HTTPConnection(type(self).SERVER)
-
-        conn.request('GET', remote_file, headers=headers)
-        response = conn.getresponse()
-        with open(local_file, 'ab') as local_grib:
-            local_grib.write(response.read())
-
-    def download(self, filename=None, file_template=None):
+    def download(self, filename=None, file_template=None, concurrent=None):
         """
         Download data. Either mergin into a single file (if filename is
         specified), or into individual files according to file_template.
@@ -337,6 +343,9 @@ class NomadsDownloader(object):
                 'specified'
             ))
 
+        if concurrent:
+            download_args = []
+
         for i, idx_file in enumerate(self.idx_files):
 
             if filename is None and file_template is None:
@@ -348,6 +357,11 @@ class NomadsDownloader(object):
                 # result in all files from the server being merged into a
                 # single local grib2 file.
                 _filename = filename
+                if concurrent is not None:
+                    # Currently concurrent downloads are only allowed if we're
+                    # downloading to individual files
+                    raise ValueError(('concurrent downloads are not allowed '
+                                      'when downloading to a single file.'))
             else:
                 # A file pattern has been specified, so we're essentially
                 # renaming the files as we download.
@@ -367,7 +381,16 @@ class NomadsDownloader(object):
                           for i in byte_ranges]))
 
             url_path = urllib.parse.urlparse(self.grib_files[i]).path
-            self._get_file(url_path, _filename, byte_header)
+            if concurrent is None:
+                get_file(type(self).SERVER, url_path, _filename, byte_header)
+            else:
+                download_args.append(
+                    (type(self).SERVER, url_path, _filename, byte_header)
+                )
+
+        if concurrent:
+            with multiprocessing.Pool(concurrent) as pool:
+                pool.starmap(get_file, download_args)
 
 
 class GFSDownloader(NomadsDownloader):
@@ -398,7 +421,7 @@ def demo():
     downloader.add_regex('.*GRD:10 m above.*')
     downloader.add_regex('.*TMP:2 m above.*')
 
-    downloader.download(file_template='gfs.t%Hz.{step:02d}.grb2')
+    downloader.download(file_template='gfs.t%Hz.{step:02d}.grb2', concurrent=4)
 
 if __name__ == '__main__':
     demo()

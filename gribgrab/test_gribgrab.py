@@ -3,6 +3,8 @@ Tests for gribgrab.
 """
 
 import datetime
+import glob
+import os
 import unittest
 
 # Allow these tests to be run both from the commandline (within this dir), and
@@ -31,6 +33,74 @@ class ExistsTestCase(unittest.TestCase):
         )
 
         self.assertFalse(downloader.exists())
+
+    def test_24hour_gfs_data_exist(self):
+        """
+        Check exists() for 24hr data is true. Note: may fail due to server
+        issues.
+        """
+        cycle = datetime.datetime.utcnow().now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(days=1)
+
+        downloader = gribgrab.NomadsDownloader(
+            cycle,
+            resolution=0.5,
+            horizon=24
+        )
+
+        self.assertTrue(downloader.exists())
+
+class DownloadTestCase(unittest.TestCase):
+    """
+    Check that downloading some files works.
+    """
+
+    def setUp(self):
+        self.cycle = datetime.datetime.utcnow().now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(days=1)
+
+        self.downloader = gribgrab.GFSDownloader(
+            cycle=self.cycle,
+            resolution=0.5,
+            horizon=12
+        )
+
+        self.downloader.add_regex('.*GRD:10 m above.*')
+
+    def test_24hour_gfs_data_download_serial(self):
+        """
+        Test we can download 1 day old 00z gfs data in serial. Note: may
+        fail due to remote issues.
+        """
+        self.downloader.download(file_template='gfs.t%Hz.{step:02d}.grb2')
+
+        self.assertTrue(os.path.isfile('gfs.t00z.00.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.03.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.06.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.09.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.12.grb2'))
+
+        for grib2 in glob.glob('gfs*.grb2'):
+            os.remove(grib2)
+
+    def test_24hour_gfs_data_download_concurrent(self):
+        """
+        Test we can download 1 day old 00z gfs data in parallel. Note: may
+        fail due to remote issues.
+        """
+        self.downloader.download(file_template='gfs.t%Hz.{step:02d}.grb2',
+                                 concurrent=3)
+
+        self.assertTrue(os.path.isfile('gfs.t00z.00.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.03.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.06.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.09.grb2'))
+        self.assertTrue(os.path.isfile('gfs.t00z.12.grb2'))
+
+        for grib2 in glob.glob('gfs*.grb2'):
+            os.remove(grib2)
 
 
 class IdxFieldTestCase(unittest.TestCase):
