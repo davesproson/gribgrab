@@ -215,16 +215,11 @@ class NomadsDownloader(object):
     Provides an interface to download grib2 forecast data from Nomads.
     """
 
-    SERVER = 'www.ftp.ncep.noaa.gov'
-    BASE_URL = '/data/nccf/com/gfs/prod/'
-    STEPS = {
-        0.25: list(chain(range(121), range(123, 241, 3), range(252, 385, 12))),
-        0.5: list(chain(range(0, 241, 3), range(252, 385, 12))),
-        1: list(chain(range(0, 241, 3), range(252, 385, 12))),
-        2.5: list(chain(range(0, 241, 3), range(252, 385, 12)))
-    }
-    VALID_RESOLUTIONS = [0.25, 0.5, 1, 2.5]
-    FILE_PATTERN = 'gfs.t{cycle_hr:02d}z.pgrb2.{res_str}.f{step:03d}'
+    SERVER = None
+    BASE_URL = None
+    STEPS = None
+    VALID_RESOLUTIONS = None
+    FILE_PATTERN = None
 
     def __init__(self, cycle, horizon=168, resolution=0.5, min_step=None,
                  logger=None):
@@ -395,6 +390,18 @@ class NomadsDownloader(object):
 
 class GFSDownloader(NomadsDownloader):
     """Placeholder. We want a GFSDownloader Specifically for GFS Data."""
+
+    SERVER = 'www.ftp.ncep.noaa.gov'
+    BASE_URL = '/data/nccf/com/gfs/prod/'
+    STEPS = {
+        0.25: list(chain(range(121), range(123, 241, 3), range(252, 385, 12))),
+        0.5: list(chain(range(0, 241, 3), range(252, 385, 12))),
+        1: list(chain(range(0, 241, 3), range(252, 385, 12))),
+        2.5: list(chain(range(0, 241, 3), range(252, 385, 12)))
+    }
+    VALID_RESOLUTIONS = [0.25, 0.5, 1, 2.5]
+    FILE_PATTERN = 'gfs.t{cycle_hr:02d}z.pgrb2.{res_str}.f{step:03d}'
+
 
 def demo():
     """

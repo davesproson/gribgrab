@@ -26,7 +26,7 @@ class ExistsTestCase(unittest.TestCase):
             hour=0, minute=0, second=0, microsecond=0
         ) + datetime.timedelta(days=3)
 
-        downloader = gribgrab.NomadsDownloader(
+        downloader = gribgrab.GFSDownloader(
             cycle,
             resolution=0.5,
             horizon=168
@@ -43,7 +43,7 @@ class ExistsTestCase(unittest.TestCase):
             hour=0, minute=0, second=0, microsecond=0
         ) - datetime.timedelta(days=1)
 
-        downloader = gribgrab.NomadsDownloader(
+        downloader = gribgrab.GFSDownloader(
             cycle,
             resolution=0.5,
             horizon=24
