@@ -72,12 +72,12 @@ def get_file(server, remote_file, local_file, byterange=None):
     else:
         headers = {}
 
-    logging.info('downloading %s', remote_file)
+    logging.info('downloading %s/%s', server, remote_file)
     logging.debug('downloading to %s', local_file)
     if byterange is not None:
         logging.debug('using byteranges %s', byterange)
 
-    conn = http.client.HTTPConnection(server)
+    conn = http.client.HTTPSConnection(server)
 
     conn.request('GET', remote_file, headers=headers)
     response = conn.getresponse()
@@ -130,7 +130,7 @@ class IdxField(object):
 
     def __repr__(self):
         return '{!s}({!r})'.format(
-            type(self).__name__,
+            self.__name__,
             str(self)
         )
 
@@ -228,7 +228,7 @@ class NomadsDownloader(object):
 
         if resolution not in type(self).VALID_RESOLUTIONS:
             raise ValueError('resolution must be one of {}'.format(
-                ','.join([str(i) for i in type(self).STEPS])
+                ','.join([str(i) for i in self.STEPS])
             ))
 
         self.regexes = []
@@ -236,15 +236,16 @@ class NomadsDownloader(object):
         self.horizon = horizon
         self.resolution = resolution
         self.min_step = min_step
-        self.base_url = 'http://{}/{}/{}'.format(
-            type(self).SERVER,
-            type(self).BASE_URL,
-            self.cycle.strftime('gfs.%Y%m%d%H/')
+        self.base_url = 'https://{}/{}/{}/{}'.format(
+            self.SERVER,
+            self.BASE_URL,
+            self.cycle.strftime('gfs.%Y%m%d'),
+            self.cycle.strftime('%H/')
         )
 
         self.res_str = '{0:0.2f}'.format(self.resolution).replace('.', 'p')
 
-        self.steps = list(type(self).STEPS[self.resolution])
+        self.steps = list(self.STEPS[self.resolution])
         if self.min_step is not None:
             self.steps = [i for i in self.steps if not i % self.min_step]
         if self.horizon is not None:
@@ -253,7 +254,7 @@ class NomadsDownloader(object):
         self.grib_files = [
             urllib.parse.urljoin(
                 self.base_url,
-                type(self).FILE_PATTERN.format(
+                self.FILE_PATTERN.format(
                     cycle_hr=self.cycle.hour,
                     res_str=self.res_str,
                     step=i
@@ -377,10 +378,10 @@ class NomadsDownloader(object):
 
             url_path = urllib.parse.urlparse(self.grib_files[i]).path
             if concurrent is None:
-                get_file(type(self).SERVER, url_path, _filename, byte_header)
+                get_file(self.SERVER, url_path, _filename, byte_header)
             else:
                 download_args.append(
-                    (type(self).SERVER, url_path, _filename, byte_header)
+                    (self.SERVER, url_path, _filename, byte_header)
                 )
 
         if concurrent:
@@ -391,8 +392,8 @@ class NomadsDownloader(object):
 class GFSDownloader(NomadsDownloader):
     """Placeholder. We want a GFSDownloader Specifically for GFS Data."""
 
-    SERVER = 'www.ftp.ncep.noaa.gov'
-    BASE_URL = '/data/nccf/com/gfs/prod/'
+    SERVER = 'ftp.ncep.noaa.gov'
+    BASE_URL = '/data/nccf/com/gfs/prod'
     STEPS = {
         0.25: list(chain(range(121), range(123, 241, 3), range(252, 385, 12))),
         0.5: list(chain(range(0, 241, 3), range(252, 385, 12))),
@@ -419,16 +420,17 @@ def demo():
         hour=0, minute=0, second=0, microsecond=0
     )
 
-    downloader = NomadsDownloader(
+    downloader = GFSDownloader(
         cycle,
         horizon=24,
-        resolution=0.5,
+        resolution=0.25,
     )
 
     downloader.add_regex('.*GRD:10 m above.*')
     downloader.add_regex('.*TMP:2 m above.*')
 
     downloader.download(file_template='gfs.t%Hz.{step:02d}.grb2', concurrent=4)
+
 
 if __name__ == '__main__':
     demo()
