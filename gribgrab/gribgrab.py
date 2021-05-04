@@ -236,11 +236,11 @@ class NomadsDownloader(object):
         self.horizon = horizon
         self.resolution = resolution
         self.min_step = min_step
-        self.base_url = 'https://{}/{}/{}/{}'.format(
+        self.base_url = 'https://{}/{}/{}/{}/atmos/'.format(
             self.SERVER,
             self.BASE_URL,
             self.cycle.strftime('gfs.%Y%m%d'),
-            self.cycle.strftime('%H/')
+            self.cycle.strftime('%H')
         )
 
         self.res_str = '{0:0.2f}'.format(self.resolution).replace('.', 'p')
@@ -392,8 +392,8 @@ class NomadsDownloader(object):
 class GFSDownloader(NomadsDownloader):
     """Placeholder. We want a GFSDownloader Specifically for GFS Data."""
 
-    SERVER = 'ftp.ncep.noaa.gov'
-    BASE_URL = '/data/nccf/com/gfs/prod'
+    SERVER = 'nomads.ncep.noaa.gov'
+    BASE_URL = '/pub/data/nccf/com/gfs/prod'
     STEPS = {
         0.25: list(chain(range(121), range(123, 241, 3), range(252, 385, 12))),
         0.5: list(chain(range(0, 241, 3), range(252, 385, 12))),
